@@ -16,7 +16,7 @@ import numpy as np
 from sklearn import (metrics, cross_validation, linear_model,
         preprocessing, ensemble)
 
-SEED = 10  # always use a seed for randomized procedures
+SEED = 0  # always use a seed for randomized procedures
 
 
 def load_data(filename, use_labels=True):
@@ -67,21 +67,28 @@ def main(trees, min_samples_split, max_features, C):
     # === one-hot encoding === #
     # we want to encode the category IDs encountered both in
     # the training and the test set, so we fit the encoder on both
-    encoder = preprocessing.OneHotEncoder()
-    encoder.fit(np.vstack((X, X_test)))
-    X_sparse = encoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
-    X_test_sparse = encoder.transform(X_test)
+    oneHotencoder = preprocessing.OneHotEncoder()
+    oneHotencoder.fit(np.vstack((X, X_test)))
+
+    labelEncoder = preprocessing.LabelEncoder()
+    labelEncoder.fit(np.vstack((X, X_test)))
+
+    X_sparse = oneHotencoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
+    X_test_sparse = oneHotencoder.transform(X_test)
+
+    X_label = labelEncoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
+    X_test_label = labelEncoder.transform(X_test)
 
     # if you want to create new features, you'll need to compute them
     # before the encoding, and append them to your dataset after
 
     # === training & metrics === #
     mean_auc = 0.0
-    n = 0  # repeat the CV procedure 10 times to get more precise results
+    n = 10  # repeat the CV procedure 10 times to get more precise results
     for i in range(n):
         # for each iteration, randomly hold out 20% of the data as CV set
-        X_train, X_cv, y_train, y_cv = cross_validation.train_test_split(
-            X, y, test_size=.20, random_state=i*SEED)
+        X_train_label, X_cv_label, y_train, y_cv = cross_validation.train_test_split(
+            X_label, y, test_size=.20, random_state=i*SEED)
 
         X_train_sparse, X_cv_sparse, y_train, y_cv = cross_validation.train_test_split(
             X_sparse, y, test_size=.20, random_state=i*SEED)
@@ -91,10 +98,10 @@ def main(trees, min_samples_split, max_features, C):
 
         # train model and make predictions
         lgr_model.fit(X_train_sparse, y_train) 
-        rf_model.fit(X_train, y_train) 
+        rf_model.fit(X_train_label, y_train) 
         
         lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
-        rf_preds = rf_model.predict(X_cv)
+        rf_preds = rf_model.predict(X_cv_label)
         mean_preds = 0.6*lgr_preds + 0.4*rf_preds
 
         # compute AUC metric for this CV fold
@@ -118,10 +125,10 @@ def main(trees, min_samples_split, max_features, C):
     # === Predictions === #
     # When making predictions, retrain the model on the whole training set
     lgr_model.fit(X_sparse, y) 
-    rf_model.fit(X, y) 
+    rf_model.fit(X_label, y) 
     
     lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
-    rf_preds = rf_model.predict(X_test)
+    rf_preds = rf_model.predict(X_test_label)
     mean_preds = 0.6*lgr_preds + 0.4*rf_preds
 
     filename = raw_input("Enter name for submission file: ")
@@ -130,4 +137,5 @@ def main(trees, min_samples_split, max_features, C):
 if __name__ == '__main__':
     # (trees, min_samples_split, max_features, C)
 
-    main(trees=100, min_samples_split=2, max_features="auto", C=3)
+    # main(trees=100, min_samples_split=2, max_features="auto", C=3) #Mean AUC: 0.871360
+    main(trees=100, min_samples_split=1, max_features=None, C=3)
