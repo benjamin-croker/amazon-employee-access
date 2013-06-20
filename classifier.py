@@ -1,15 +1,3 @@
-""" Amazon Access Challenge Starter Code
-
-These files provide some starter code using 
-the scikit-learn library. It provides some examples on how
-to design a simple algorithm, including pre-processing,
-training a logistic regression classifier on the data,
-assess its performance through cross-validation and some 
-pointers on where to go next.
-
-Paul Duan <email@paulduan.com>
-"""
-
 from __future__ import division
 
 import numpy as np
@@ -97,8 +85,8 @@ def main(trees, min_samples_split, max_features, C):
         # optimization, this is where you want to do it
 
         # train model and make predictions
-        lgr_model.fit(X_train_sparse, y_train) 
-        rf_model.fit(X_train_label, y_train) 
+        lgr_model.fit(X_train_sparse, y_train)
+        rf_model.fit(X_train_label, y_train)
         
         lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
         rf_preds = rf_model.predict(X_cv_label)
