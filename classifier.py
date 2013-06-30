@@ -49,7 +49,6 @@ def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
     rf_model = ensemble.RandomForestRegressor(trees, n_jobs=2,
             min_samples_split=min_samples_split,
             max_features=max_features)
-    # rf_model = ensemble.RandomForestRegressor(100, n_jobs=2)
 
     # === load data in memory === #
     print "loading data"
@@ -68,7 +67,7 @@ def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
     X_sparse = oneHotencoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
     X_test_sparse = oneHotencoder.transform(X_test)
 
-    X_label = labelEncoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
+    X_label = labelEncoder.transform(X)
     X_test_label = labelEncoder.transform(X_test)
 
     # if you want to create new features, you'll need to compute them
@@ -131,10 +130,8 @@ def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
 
 if __name__ == '__main__':
     # (trees, min_samples_split, max_features, C, mix_lgr)
-    param_sets = [(20, 2, "auto", 3, 0.6),
-                  (20, 2, None, 3, 0.6),
-                  (20, 2, "auto", 5, 0.6),
-                  (20, 2, None, 5, 0.6),
+    param_sets = [(100, 2, None, 3, 0.6),
+                  (100, 8, None, 3, 0.6),
                  ]
 
     for params in param_sets:
