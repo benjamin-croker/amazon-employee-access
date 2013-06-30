@@ -34,12 +34,16 @@ def save_results(predictions, filename):
             f.write("%d,%f\n" % (i + 1, pred))
 
 
-def main(trees, min_samples_split, max_features, C):
+def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
     """
     Fit models and make predictions.
     We'll use one-hot encoding to transform our categorical features
     into binary features.
     y and X will be numpy array objects.
+
+    if test is true, it runs a 10-fold cross validation and reports the mean
+    AUC. If not, it trains the model on the whole dataset and outputs a prediction
+    file.
     """
     lgr_model = linear_model.LogisticRegression(C=C)
     rf_model = ensemble.RandomForestRegressor(trees, n_jobs=2,
@@ -49,8 +53,8 @@ def main(trees, min_samples_split, max_features, C):
 
     # === load data in memory === #
     print "loading data"
-    y, X = load_data('train.csv')
-    y_test, X_test = load_data('test.csv', use_labels=False)
+    y, X = load_data("train.csv")
+    y_test, X_test = load_data("test.csv", use_labels=False)
 
     # === one-hot encoding === #
     # we want to encode the category IDs encountered both in
@@ -70,61 +74,70 @@ def main(trees, min_samples_split, max_features, C):
     # if you want to create new features, you'll need to compute them
     # before the encoding, and append them to your dataset after
 
-    # === training & metrics === #
-    mean_auc = 0.0
-    n = 10  # repeat the CV procedure 10 times to get more precise results
-    for i in range(n):
-        # for each iteration, randomly hold out 20% of the data as CV set
-        X_train_label, X_cv_label, y_train, y_cv = cross_validation.train_test_split(
-            X_label, y, test_size=.20, random_state=i*SEED)
+    if test:
+        # === training & metrics === #
+        mean_auc = 0.0
+        n = 10  # repeat the CV procedure 10 times to get more precise results
+        for i in range(n):
+            # for each iteration, randomly hold out 20% of the data as CV set
+            X_train_label, X_cv_label, y_train, y_cv = cross_validation.train_test_split(
+                X_label, y, test_size=.20, random_state=i*SEED)
 
-        X_train_sparse, X_cv_sparse, y_train, y_cv = cross_validation.train_test_split(
-            X_sparse, y, test_size=.20, random_state=i*SEED)
+            X_train_sparse, X_cv_sparse, y_train, y_cv = cross_validation.train_test_split(
+                X_sparse, y, test_size=.20, random_state=i*SEED)
 
-        # if you want to perform feature selection / hyperparameter
-        # optimization, this is where you want to do it
+            # if you want to perform feature selection / hyperparameter
+            # optimization, this is where you want to do it
 
-        # train model and make predictions
-        lgr_model.fit(X_train_sparse, y_train)
-        rf_model.fit(X_train_label, y_train)
+            # train model and make predictions
+            lgr_model.fit(X_train_sparse, y_train)
+            rf_model.fit(X_train_label, y_train)
+            
+            lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
+            rf_preds = rf_model.predict(X_cv_label)
+
+            combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
+
+            # compute AUC metric for this CV fold
+            fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
+            roc_auc = metrics.auc(fpr, tpr)
+            print "Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+
+            fpr, tpr, thresholds = metrics.roc_curve(y_cv, rf_preds)
+            roc_auc = metrics.auc(fpr, tpr)
+            print "RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+
+            fpr, tpr, thresholds = metrics.roc_curve(y_cv, combined_preds)
+            roc_auc = metrics.auc(fpr, tpr)
+            print "Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+
+            mean_auc += roc_auc
+        return mean_auc/n
+
+    else: 
+        # === Predictions === #
+        # When making predictions, retrain the model on the whole training set
+        lgr_model.fit(X_sparse, y) 
+        rf_model.fit(X_label, y) 
         
-        lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
-        rf_preds = rf_model.predict(X_cv_label)
-        mean_preds = 0.6*lgr_preds + 0.4*rf_preds
+        lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
+        rf_preds = rf_model.predict(X_test_label)
 
-        # compute AUC metric for this CV fold
-        fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
-        roc_auc = metrics.auc(fpr, tpr)
-        print "Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+        combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
 
-        fpr, tpr, thresholds = metrics.roc_curve(y_cv, rf_preds)
-        roc_auc = metrics.auc(fpr, tpr)
-        print "RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
-
-        fpr, tpr, thresholds = metrics.roc_curve(y_cv, mean_preds)
-        roc_auc = metrics.auc(fpr, tpr)
-        print "Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
-
-        mean_auc += roc_auc
-
-
-    if n !=0: print "Mean AUC: %f" % (mean_auc/n)
-
-    # === Predictions === #
-    # When making predictions, retrain the model on the whole training set
-    lgr_model.fit(X_sparse, y) 
-    rf_model.fit(X_label, y) 
-    
-    lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
-    rf_preds = rf_model.predict(X_test_label)
-    mean_preds = 0.6*lgr_preds + 0.4*rf_preds
-
-    filename = raw_input("Enter name for submission file: ")
-    save_results(mean_preds, filename + ".csv")
+        filename = raw_input("Enter name for submission file: ")
+        save_results(combined_preds, filename + ".csv")
+        return 0
 
 if __name__ == '__main__':
-    # (trees, min_samples_split, max_features, C)
+    # (trees, min_samples_split, max_features, C, mix_lgr)
+    param_sets = [(20, 2, "auto", 3, 0.6),
+                  (20, 2, None, 3, 0.6),
+                  (20, 2, "auto", 5, 0.6),
+                  (20, 2, None, 5, 0.6),
+                 ]
 
-    # main(trees=100, min_samples_split=2, max_features="auto", C=3) #Mean AUC: 0.871360
-    # main(trees=100, min_samples_split=1, max_features=None, C=3) #Mean AUC: 0.872641
-    main(trees=100, min_samples_split=2, max_features=None, C=5) #Mean AUC: 0.873075
+    for params in param_sets:
+        print("trees:{} min_samples_split:{} max_features:{} C:{} mix_lgr:{}".format(*params))
+        mean_auc = run_model(True, *params)
+        print "Mean AUC: %f" % (mean_auc)         
