@@ -4,7 +4,7 @@ import numpy as np
 from sklearn import (metrics, cross_validation, linear_model,
         preprocessing, ensemble)
 
-SEED = 0  # always use a seed for randomized procedures
+SEED = 100  # always use a seed for randomized procedures
 
 
 def load_data(filename, use_labels=True):
@@ -126,4 +126,5 @@ if __name__ == '__main__':
     # (trees, min_samples_split, max_features, C)
 
     # main(trees=100, min_samples_split=2, max_features="auto", C=3) #Mean AUC: 0.871360
-    main(trees=100, min_samples_split=1, max_features=None, C=3)
+    # main(trees=100, min_samples_split=1, max_features=None, C=3) #Mean AUC: 0.872641
+    main(trees=100, min_samples_split=2, max_features=None, C=5) #Mean AUC: 0.873075
