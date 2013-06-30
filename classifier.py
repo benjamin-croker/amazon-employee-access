@@ -4,7 +4,8 @@ import numpy as np
 from sklearn import (metrics, cross_validation, linear_model,
         preprocessing, ensemble)
 
-SEED = 0  # always use a seed for randomized procedures
+# the seed can't be zero since i*SEED is used for splitting training data
+SEED = 100
 
 
 def load_data(filename, use_labels=True):
@@ -81,16 +82,23 @@ def main(trees, min_samples_split, max_features, C):
         X_train_sparse, X_cv_sparse, y_train, y_cv = cross_validation.train_test_split(
             X_sparse, y, test_size=.20, random_state=i*SEED)
 
-        # if you want to perform feature selection / hyperparameter
-        # optimization, this is where you want to do it
-
         # train model and make predictions
         lgr_model.fit(X_train_sparse, y_train)
-        rf_model.fit(X_train_label, y_train)
-        
         lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
+
+        # train the random forest, weighting samples the logistic model got
+        # wrong higher
+        sample_preds = lgr_model.predict_proba(X_train_sparse)[:, 1]
+        sample_weights = np.abs(sample_preds-y_train)
+        sample_weights = sample_weights / sample_weights.sum()
+
+        rf_model.fit(X_train_label, y_train)
         rf_preds = rf_model.predict(X_cv_label)
-        mean_preds = 0.6*lgr_preds + 0.4*rf_preds
+        
+        # take the "most confident" model, i.e. prob greatest distance from 0.5
+        lgr_better = abs(lgr_preds-0.5) > abs(rf_preds-0.5)
+        combined_preds = lgr_preds*lgr_better + rf_preds*~lgr_better
+        combined_preds = 0.6*lgr_preds + 0.4*rf_preds
 
         # compute AUC metric for this CV fold
         fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
@@ -101,7 +109,7 @@ def main(trees, min_samples_split, max_features, C):
         roc_auc = metrics.auc(fpr, tpr)
         print "RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
 
-        fpr, tpr, thresholds = metrics.roc_curve(y_cv, mean_preds)
+        fpr, tpr, thresholds = metrics.roc_curve(y_cv, combined_preds)
         roc_auc = metrics.auc(fpr, tpr)
         print "Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
 
@@ -112,18 +120,23 @@ def main(trees, min_samples_split, max_features, C):
 
     # === Predictions === #
     # When making predictions, retrain the model on the whole training set
-    lgr_model.fit(X_sparse, y) 
-    rf_model.fit(X_label, y) 
-    
+    lgr_model.fit(X_sparse, y)
     lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
+
+    sample_preds = lgr_model.predict_proba(X_sparse)[:, 1]
+    sample_weights = np.abs(sample_preds-y)
+    sample_weights = sample_weights / sample_weights.sum()
+
+    rf_model.fit(X_label, y, sample_weights) 
+    
     rf_preds = rf_model.predict(X_test_label)
-    mean_preds = 0.6*lgr_preds + 0.4*rf_preds
+    combined_preds = 0.6*lgr_preds + 0.4*rf_preds
 
     filename = raw_input("Enter name for submission file: ")
-    save_results(mean_preds, filename + ".csv")
+    save_results(combined_preds, filename + ".csv")
 
 if __name__ == '__main__':
     # (trees, min_samples_split, max_features, C)
 
-    # main(trees=100, min_samples_split=2, max_features="auto", C=3) #Mean AUC: 0.871360
-    main(trees=100, min_samples_split=1, max_features=None, C=3)
+    # main(trees=100, min_samples_split=2, max_features="auto", C=3)
+    main(trees=100, min_samples_split=2, max_features=None, C=5)
