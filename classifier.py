@@ -1,6 +1,7 @@
 from __future__ import division
 
 import numpy as np
+import sys
 from sklearn import (metrics, cross_validation, linear_model,
         preprocessing, ensemble)
 
@@ -34,7 +35,7 @@ def save_results(predictions, filename):
             f.write("%d,%f\n" % (i + 1, pred))
 
 
-def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
+def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
     """
     Fit models and make predictions.
     We'll use one-hot encoding to transform our categorical features
@@ -48,7 +49,7 @@ def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
     lgr_model = linear_model.LogisticRegression(C=C)
     rf_model = ensemble.RandomForestRegressor(trees, n_jobs=2,
             min_samples_split=min_samples_split,
-            max_features=max_features)
+            min_samples_leaf=min_samples_leaf)
 
     # === load data in memory === #
     print "loading data"
@@ -129,13 +130,16 @@ def run_model(test, trees, min_samples_split, max_features, C, mix_lgr):
         return 0
 
 if __name__ == '__main__':
-    # (trees, min_samples_split, max_features, C, mix_lgr)
-    param_sets = [(100, 2, None, 3, 0.6),
-                  (100, 8, None, 3, 0.6),
-                  (100, 16, None, 3, 0.6),
-                 ]
+    if sys.argv[1] == "test":
+        (trees, min_samples_split, min_samples_leaf, C, mix_lgr)
+        param_sets = [(100, 8, 1, 3, 0.6),
+                      (100, 8, 2, 3, 0.6),
+                      (100, 8, 4, 3, 0.6),
+                     ]
 
-    for params in param_sets:
-        print("trees:{} min_samples_split:{} max_features:{} C:{} mix_lgr:{}".format(*params))
-        mean_auc = run_model(True, *params)
-        print "Mean AUC: %f" % (mean_auc)         
+        for params in param_sets:
+            print("trees:{} min_samples_split:{} min_samples_leaf:{} C:{} mix_lgr:{}".format(*params))
+            mean_auc = run_model(True, *params)
+            print "Mean AUC: %f" % (mean_auc)
+    elif sys.argv[1] == "run":
+        mean_auc = run_model(False, 100, 8, 1, 3, 0.6)
