@@ -132,6 +132,7 @@ if __name__ == '__main__':
     # (trees, min_samples_split, max_features, C, mix_lgr)
     param_sets = [(100, 2, None, 3, 0.6),
                   (100, 8, None, 3, 0.6),
+                  (100, 16, None, 3, 0.6),
                  ]
 
     for params in param_sets:
