@@ -131,7 +131,7 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
 
 if __name__ == '__main__':
     if sys.argv[1] == "test":
-        (trees, min_samples_split, min_samples_leaf, C, mix_lgr)
+        # (trees, min_samples_split, min_samples_leaf, C, mix_lgr)
         param_sets = [(100, 8, 1, 3, 0.6),
                       (100, 8, 2, 3, 0.6),
                       (100, 8, 4, 3, 0.6),
