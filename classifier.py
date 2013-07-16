@@ -96,7 +96,16 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
             lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
             rf_preds = rf_model.predict(X_cv_label)
 
-            combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
+            if mix_lgr == "least_certain":
+                # pick the prediction with the probability closest to 0.5
+                pick_lgr = np.abs(lgr_preds-0.5) < np.abs(rf_preds-0.5)
+                combined_preds = pick_lgr*lgr_preds + ~pick_lgr*rf_preds
+            elif mix_lgr == "most_certain":
+                # pick the prediction with the probability furthest from 0.5
+                pick_lgr = np.abs(lgr_preds-0.5) > np.abs(rf_preds-0.5)
+                combined_preds = pick_lgr*lgr_preds + ~pick_lgr*rf_preds
+            else: 
+                combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
 
             # compute AUC metric for this CV fold
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
@@ -132,9 +141,8 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
 if __name__ == '__main__':
     if sys.argv[1] == "test":
         # (trees, min_samples_split, min_samples_leaf, C, mix_lgr)
-        param_sets = [(100, 8, 1, 3, 0.6),
-                      (100, 8, 2, 3, 0.6),
-                      (100, 8, 4, 3, 0.6),
+        param_sets = [
+                      (100, 8, 1, 3, 0.6), #Mean AUC: 0.874386 -- the one to beat
                      ]
 
         for params in param_sets:
