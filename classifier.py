@@ -2,6 +2,7 @@ from __future__ import division
 
 import numpy as np
 import sys
+import pynn
 from sklearn import (metrics, cross_validation, linear_model,
         preprocessing, ensemble)
 
