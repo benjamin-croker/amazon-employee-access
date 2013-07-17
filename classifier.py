@@ -52,7 +52,7 @@ def run_model(test, lgr_args, rf_args, svm_args, mix):
     svm_model = svm.SVC(probability=True, **svm_args)
 
     # === load data in memory === #
-    print "loading data"
+    print("loading data")
     y, X = load_data("train.csv")
     y_test, X_test = load_data("test.csv", use_labels=False)
 
@@ -90,6 +90,7 @@ def run_model(test, lgr_args, rf_args, svm_args, mix):
             # optimization, this is where you want to do it
 
             # train model and make predictions
+            print("Training models")
             lgr_model.fit(X_train_sparse, y_train)
             rf_model.fit(X_train_label, y_train)
             svm_model.fit(X_train_sparse, y_train)
@@ -106,19 +107,19 @@ def run_model(test, lgr_args, rf_args, svm_args, mix):
             # compute AUC metric for this CV fold
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
             roc_auc = metrics.auc(fpr, tpr)
-            print "Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+            print("Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, svm_preds)
             roc_auc = metrics.auc(fpr, tpr)
-            print "SVM Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+            print("SVM Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, rf_preds)
             roc_auc = metrics.auc(fpr, tpr)
-            print "RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+            print("RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, combined_preds)
             roc_auc = metrics.auc(fpr, tpr)
-            print "Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+            print("Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
             mean_auc += roc_auc
         return mean_auc/n
@@ -162,8 +163,8 @@ if __name__ == '__main__':
         for params in param_sets:
             print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
             mean_auc = run_model(True, *params)
-            print "Mean AUC: %f" % (mean_auc)
+            print("Mean AUC: %f" % (mean_auc))
     elif sys.argv[1] == "run":
-        params = param_sets[1]
+        params = param_sets[0]
         print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
         mean_auc = run_model(False, *params)
