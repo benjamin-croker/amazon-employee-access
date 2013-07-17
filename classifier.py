@@ -149,15 +149,23 @@ if __name__ == '__main__':
     param_sets = [({"C":3},
                    {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
                    {"C":1, "gamma":0.1, "cache_size":500},
-                   [9.0, 6.0, 6.0]),
+                   [9.0, 6.0, 6.0]), # Mean AUC: 0.870934
                   ({"C":3},
                    {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
                    {"C":1, "gamma":0.1, "cache_size":500},
-                   [9.0, 6.0, 3.0]),
+                   [9.0, 6.0, 3.0]), # Mean AUC: 0.870739
                   ({"C":3},
                    {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
                    {"C":1, "gamma":0.1, "cache_size":500},
-                   [6.0, 4.0, 0.0])
+                   [6.0, 4.0, 0.0]), # Mean AUC: 0.869819
+                  ({"C":3},
+                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
+                   {"C":1, "gamma":0.1, "cache_size":500},
+                   [9.0, 3.0, 6.0]), # Mean AUC: 0.869334
+                  ({"C":3},
+                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
+                   {"C":1, "gamma":0.1, "cache_size":500},
+                   [6.0, 0.0, 4.0]) # Mean AUC: 0.860840
                   ]
     if sys.argv[1] == "test":
         for params in param_sets:
