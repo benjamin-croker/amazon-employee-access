@@ -2,10 +2,11 @@ from __future__ import division
 
 import numpy as np
 import sys
+import pynn
 from sklearn import (metrics, cross_validation, linear_model,
-        preprocessing, ensemble)
+        preprocessing, ensemble, svm)
 
-SEED = 100  # always use a seed for randomized procedures
+SEED = 111  # always use a seed for randomized procedures
 
 
 def load_data(filename, use_labels=True):
@@ -35,7 +36,7 @@ def save_results(predictions, filename):
             f.write("%d,%f\n" % (i + 1, pred))
 
 
-def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
+def run_model(test, lgr_args, rf_args, svm_args, mix):
     """
     Fit models and make predictions.
     We'll use one-hot encoding to transform our categorical features
@@ -46,10 +47,9 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
     AUC. If not, it trains the model on the whole dataset and outputs a prediction
     file.
     """
-    lgr_model = linear_model.LogisticRegression(C=C)
-    rf_model = ensemble.RandomForestRegressor(trees, n_jobs=2,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf)
+    lgr_model = linear_model.LogisticRegression(**lgr_args)
+    rf_model = ensemble.RandomForestRegressor(**rf_args)
+    svm_model = svm.SVC(probability=True, **svm_args)
 
     # === load data in memory === #
     print "loading data"
@@ -92,25 +92,25 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
             # train model and make predictions
             lgr_model.fit(X_train_sparse, y_train)
             rf_model.fit(X_train_label, y_train)
-            
+            svm_model.fit(X_train_sparse, y_train)
+
             lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
             rf_preds = rf_model.predict(X_cv_label)
+            svm_preds = svm_model.predict_proba(X_cv_sparse)[:, 1]
 
-            if mix_lgr == "least_certain":
-                # pick the prediction with the probability closest to 0.5
-                pick_lgr = np.abs(lgr_preds-0.5) < np.abs(rf_preds-0.5)
-                combined_preds = pick_lgr*lgr_preds + ~pick_lgr*rf_preds
-            elif mix_lgr == "most_certain":
-                # pick the prediction with the probability furthest from 0.5
-                pick_lgr = np.abs(lgr_preds-0.5) > np.abs(rf_preds-0.5)
-                combined_preds = pick_lgr*lgr_preds + ~pick_lgr*rf_preds
-            else: 
-                combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
+            # normalise the mix ratios, then mix the predictor outcomes
+            mix = np.array(mix, dtype="float64")
+            mix /= mix.sum()
+            combined_preds = mix[0]*lgr_preds + mix[1]*rf_preds + mix[2]*svm_preds
 
             # compute AUC metric for this CV fold
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
             roc_auc = metrics.auc(fpr, tpr)
             print "Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
+
+            fpr, tpr, thresholds = metrics.roc_curve(y_cv, svm_preds)
+            roc_auc = metrics.auc(fpr, tpr)
+            print "SVM Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc)
 
             fpr, tpr, thresholds = metrics.roc_curve(y_cv, rf_preds)
             roc_auc = metrics.auc(fpr, tpr)
@@ -126,28 +126,44 @@ def run_model(test, trees, min_samples_split, min_samples_leaf, C, mix_lgr):
     else: 
         # === Predictions === #
         # When making predictions, retrain the model on the whole training set
-        lgr_model.fit(X_sparse, y) 
+        lgr_model.fit(X_sparse, y)
+        svm_model.fit(X_sparse, y)
         rf_model.fit(X_label, y) 
         
         lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
+        svm_preds = svm_model.predict(X_test_sparse)
         rf_preds = rf_model.predict(X_test_label)
 
-        combined_preds = mix_lgr*lgr_preds + (1.0 - mix_lgr)*rf_preds
+        # normalise the mix ratios, then mix the predictor outcomes
+        mix = np.array(mix, dtype="float64")
+        mix /= mix.sum()
+        combined_preds = mix[0]*lgr_preds + mix[1]*rf_preds + mix[2]*svm_preds
 
         filename = raw_input("Enter name for submission file: ")
         save_results(combined_preds, filename + ".csv")
         return 0
 
 if __name__ == '__main__':
+    # (lgr_args, rf_args, svm_args, mix)
+    param_sets = [({"C":3},
+                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
+                   {"C":1, "gamma":0.1, "cache_size":500},
+                   [9.0, 6.0, 6.0]),
+                  ({"C":3},
+                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
+                   {"C":1, "gamma":0.1, "cache_size":500},
+                   [9.0, 6.0, 3.0]),
+                  ({"C":3},
+                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
+                   {"C":1, "gamma":0.1, "cache_size":500},
+                   [6.0, 4.0, 0.0])
+                  ]
     if sys.argv[1] == "test":
-        # (trees, min_samples_split, min_samples_leaf, C, mix_lgr)
-        param_sets = [
-                      (100, 8, 1, 3, 0.6), #Mean AUC: 0.874386 -- the one to beat
-                     ]
-
         for params in param_sets:
-            print("trees:{} min_samples_split:{} min_samples_leaf:{} C:{} mix_lgr:{}".format(*params))
+            print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
             mean_auc = run_model(True, *params)
             print "Mean AUC: %f" % (mean_auc)
     elif sys.argv[1] == "run":
-        mean_auc = run_model(False, 100, 8, 1, 3, 0.6)
+        params = param_sets[1]
+        print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
+        mean_auc = run_model(False, *params)
