@@ -2,11 +2,50 @@ from __future__ import division
 
 import numpy as np
 import sys
-import pynn
+import os
+import matplotlib.pyplot as plt
 from sklearn import (metrics, cross_validation, linear_model,
-        preprocessing, ensemble, svm)
+                     preprocessing, ensemble, svm)
 
 SEED = 111  # always use a seed for randomized procedures
+
+
+def roc_eval(actual_values, predicted_values, fig=None, label=None):
+    """
+    Returns the ROC area under curve
+    :param predicted_values:
+    :param actual_values:
+    :param fig: the matplotlib axis to plot on, if none is give, a new
+        figure is created
+    :param label: the label to use for the ROC line
+    """
+    fpr, tpr, thresholds = metrics.roc_curve(actual_values, predicted_values)
+    roc_auc = metrics.auc(fpr, tpr)
+
+    if fig is None:
+        fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    ax.plot(fpr, tpr, label=label)
+    ax.set_xlabel("False +ve Rate")
+    ax.set_ylabel("True +ve Rate")
+
+    return roc_auc
+
+
+def predictions_dist(actual_values, predicted_values, fig=None):
+    posProbs = predicted_values[actual_values == 1]
+    negProbs = predicted_values[actual_values == 0]
+
+    if fig is None:
+        fig = plt.figure()
+    axPos = fig.add_subplot(211)
+    axPos.hist(posProbs, 20)
+    axPos.set_xlabel("Probs for +ve datapoints")
+
+    axNeg = fig.add_subplot(212)
+    axNeg.hist(negProbs, 20)
+    axNeg.set_xlabel("Probs for -ve datapoints")
 
 
 def load_data(filename, use_labels=True):
@@ -18,14 +57,34 @@ def load_data(filename, use_labels=True):
     """
 
     # load column 1 to 8 (ignore last one)
-    data = np.loadtxt(open("data/" + filename), delimiter=',',
-                      usecols=range(1, 9), skiprows=1)
+    data = np.loadtxt(open(os.path.join("data", filename)),
+                      delimiter=',', usecols=range(1, 9), skiprows=1)
     if use_labels:
-        labels = np.loadtxt(open("data/" + filename), delimiter=',',
-                            usecols=[0], skiprows=1)
+        labels = np.loadtxt(open(os.path.join("data", filename)),
+                            delimiter=',', usecols=[0], skiprows=1)
+        return data, labels
     else:
-        labels = np.zeros(data.shape[0])
-    return labels, data
+        return data
+
+
+def encode_data(X_train, X_test):
+    """
+    Takes the labels and data and returns label and one-hot encoded versions
+    of the data
+    """
+    oneHotencoder = preprocessing.OneHotEncoder()
+    oneHotencoder.fit(np.vstack((X_train, X_test)))
+
+    labelEncoder = preprocessing.LabelEncoder()
+    labelEncoder.fit(np.vstack((X_train, X_test)))
+
+    X_onehot = oneHotencoder.transform(X_train)  # Returns a sparse matrix (see numpy.sparse)
+    X_test_onehot = oneHotencoder.transform(X_test)
+
+    X_label = labelEncoder.transform(X_train)
+    X_test_label = labelEncoder.transform(X_test)
+
+    return X_onehot, X_test_onehot, X_label, X_test_label
 
 
 def save_results(predictions, filename):
@@ -36,7 +95,7 @@ def save_results(predictions, filename):
             f.write("%d,%f\n" % (i + 1, pred))
 
 
-def run_model(test, lgr_args, rf_args, svm_args, mix):
+def run_model(test, lgr_args, rf_args, svm_args, mix, n=10):
     """
     Fit models and make predictions.
     We'll use one-hot encoding to transform our categorical features
@@ -53,126 +112,140 @@ def run_model(test, lgr_args, rf_args, svm_args, mix):
 
     # === load data in memory === #
     print("loading data")
-    y, X = load_data("train.csv")
-    y_test, X_test = load_data("test.csv", use_labels=False)
+    X, y = load_data("train.csv")
+    X_test = load_data("test.csv", use_labels=False)
 
-    # === one-hot encoding === #
-    # we want to encode the category IDs encountered both in
-    # the training and the test set, so we fit the encoder on both
-    oneHotencoder = preprocessing.OneHotEncoder()
-    oneHotencoder.fit(np.vstack((X, X_test)))
+    X_onehot, X_test_onehot, X_label, X_test_label = encode_data(X, X_test)
 
-    labelEncoder = preprocessing.LabelEncoder()
-    labelEncoder.fit(np.vstack((X, X_test)))
-
-    X_sparse = oneHotencoder.transform(X)  # Returns a sparse matrix (see numpy.sparse)
-    X_test_sparse = oneHotencoder.transform(X_test)
-
-    X_label = labelEncoder.transform(X)
-    X_test_label = labelEncoder.transform(X_test)
-
-    # if you want to create new features, you'll need to compute them
-    # before the encoding, and append them to your dataset after
+    # normalise the mix ratios, then mix the predictor outcomes
+    mix = np.array(mix, dtype="float64")
+    mix /= mix.sum()
 
     if test:
         # === training & metrics === #
         mean_auc = 0.0
-        n = 10  # repeat the CV procedure 10 times to get more precise results
         for i in range(n):
             # for each iteration, randomly hold out 20% of the data as CV set
             X_train_label, X_cv_label, y_train, y_cv = cross_validation.train_test_split(
-                X_label, y, test_size=.20, random_state=i*SEED)
+                X_label, y, test_size=.20, random_state=i * SEED)
 
-            X_train_sparse, X_cv_sparse, y_train, y_cv = cross_validation.train_test_split(
-                X_sparse, y, test_size=.20, random_state=i*SEED)
-
-            # if you want to perform feature selection / hyperparameter
-            # optimization, this is where you want to do it
+            X_train_onehot, X_cv_onehot, y_train, y_cv = cross_validation.train_test_split(
+                X_onehot, y, test_size=.20, random_state=i * SEED)
 
             # train model and make predictions
-            print("Training models")
-            lgr_model.fit(X_train_sparse, y_train)
+            print("Training LGR model")
+            lgr_model.fit(X_train_onehot, y_train)
+            print("Training RF model")
             rf_model.fit(X_train_label, y_train)
-            svm_model.fit(X_train_sparse, y_train)
+            print("Training SVM model")
+            svm_model.fit(X_train_onehot, y_train)
 
-            lgr_preds = lgr_model.predict_proba(X_cv_sparse)[:, 1]
+            lgr_preds = lgr_model.predict_proba(X_cv_onehot)[:, 1]
             rf_preds = rf_model.predict(X_cv_label)
-            svm_preds = svm_model.predict_proba(X_cv_sparse)[:, 1]
+            svm_preds = svm_model.predict_proba(X_cv_onehot)[:, 1]
 
-            # normalise the mix ratios, then mix the predictor outcomes
-            mix = np.array(mix, dtype="float64")
-            mix /= mix.sum()
-            combined_preds = mix[0]*lgr_preds + mix[1]*rf_preds + mix[2]*svm_preds
+            combined_preds = mix[0] * lgr_preds + mix[1] * rf_preds + mix[2] * svm_preds
 
             # compute AUC metric for this CV fold
-            fpr, tpr, thresholds = metrics.roc_curve(y_cv, lgr_preds)
-            roc_auc = metrics.auc(fpr, tpr)
+            roc_fig = plt.figure()
+
+            dist_fig = plt.figure()
+            predictions_dist(y_cv, lgr_preds, fig=dist_fig)
+            dist_fig.savefig(os.path.join("plots", "lgr_dist_fold_{0}.png".format(i + 1)))
+            roc_auc = roc_eval(y_cv, lgr_preds, fig=roc_fig, label="LGR")
             print("Logistic Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
-            fpr, tpr, thresholds = metrics.roc_curve(y_cv, svm_preds)
-            roc_auc = metrics.auc(fpr, tpr)
-            print("SVM Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
-
-            fpr, tpr, thresholds = metrics.roc_curve(y_cv, rf_preds)
-            roc_auc = metrics.auc(fpr, tpr)
+            dist_fig = plt.figure()
+            predictions_dist(y_cv, rf_preds, fig=dist_fig)
+            dist_fig.savefig(os.path.join("plots", "rf_dist_fold_{0}.png".format(i + 1)))
+            roc_auc = roc_eval(y_cv, rf_preds, fig=roc_fig, label="RF")
             print("RF Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
-            fpr, tpr, thresholds = metrics.roc_curve(y_cv, combined_preds)
-            roc_auc = metrics.auc(fpr, tpr)
+            dist_fig = plt.figure()
+            predictions_dist(y_cv, svm_preds, fig=dist_fig)
+            dist_fig.savefig(os.path.join("plots", "svm_dist_fold_{0}.png".format(i + 1)))
+            roc_auc = roc_eval(y_cv, svm_preds, fig=roc_fig, label="SVM")
+            print("SVM Regression AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
+
+            dist_fig = plt.figure()
+            predictions_dist(y_cv, combined_preds, fig=dist_fig)
+            dist_fig.savefig(os.path.join("plots", "combined_dist_fold_{0}.png".format(i + 1)))
+            roc_auc = roc_eval(y_cv, combined_preds, fig=roc_fig, label="Combined")
             print("Combined AUC (fold {0}/{1}): {2}".format(i + 1, n, roc_auc))
 
+            # roc_fig.title("ROCs for fold {0}/{1}".format(i + 1, n))
+            plt.figure(roc_fig.number)
+            plt.legend()
+            roc_fig.savefig(os.path.join("plots", "roc_fold_{0}.png".format(i + 1)))
+
             mean_auc += roc_auc
-        return mean_auc/n
+        return mean_auc / n
 
-    else: 
-        # === Predictions === #
+    else:
+    # === Predictions === #
         # When making predictions, retrain the model on the whole training set
-        lgr_model.fit(X_sparse, y)
-        svm_model.fit(X_sparse, y)
-        rf_model.fit(X_label, y) 
-        
-        lgr_preds = lgr_model.predict_proba(X_test_sparse)[:, 1]
-        svm_preds = svm_model.predict(X_test_sparse)
-        rf_preds = rf_model.predict(X_test_label)
+        print("Training LGR model")
+        lgr_model.fit(X_onehot, y)
+        print("Training RF model")
+        rf_model.fit(X_label, y)
+        print("Training SVM model")
+        svm_model.fit(X_onehot, y)
 
-        # normalise the mix ratios, then mix the predictor outcomes
-        mix = np.array(mix, dtype="float64")
-        mix /= mix.sum()
-        combined_preds = mix[0]*lgr_preds + mix[1]*rf_preds + mix[2]*svm_preds
+        lgr_preds = lgr_model.predict_proba(X_test_onehot)[:, 1]
+        rf_preds = rf_model.predict(X_test_label)
+        svm_preds = svm_model.predict_proba(X_test_onehot)[:, 1]
+
+        combined_preds = mix[0] * lgr_preds + mix[1] * rf_preds + mix[2] * svm_preds
 
         filename = raw_input("Enter name for submission file: ")
         save_results(combined_preds, filename + ".csv")
         return 0
 
+
 if __name__ == '__main__':
     # (lgr_args, rf_args, svm_args, mix)
-    param_sets = [({"C":3},
-                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
-                   {"C":1, "gamma":0.1, "cache_size":500},
+    params_best = ({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   [9.0, 6.0, 6.0])
+    param_sets = [({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
                    [9.0, 6.0, 6.0]), # Mean AUC: 0.870934
-                  ({"C":3},
-                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
-                   {"C":1, "gamma":0.1, "cache_size":500},
+                  ({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
                    [9.0, 6.0, 3.0]), # Mean AUC: 0.870739
-                  ({"C":3},
-                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
-                   {"C":1, "gamma":0.1, "cache_size":500},
+                  ({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
                    [6.0, 4.0, 0.0]), # Mean AUC: 0.869819
-                  ({"C":3},
-                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
-                   {"C":1, "gamma":0.1, "cache_size":500},
+                  ({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
                    [9.0, 3.0, 6.0]), # Mean AUC: 0.869334
-                  ({"C":3},
-                   {"n_estimators":100, "min_samples_split":8, "min_samples_leaf":1},
-                   {"C":1, "gamma":0.1, "cache_size":500},
-                   [6.0, 0.0, 4.0]) # Mean AUC: 0.860840
-                  ]
-    if sys.argv[1] == "test":
+                  ({"C": 3},
+                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   [6.0, 0.0, 4.0])  # Mean AUC: 0.860840
+    ]
+
+    if sys.argv[1] == "evaluate":
         for params in param_sets:
             print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
-            mean_auc = run_model(True, *params)
-            print("Mean AUC: %f" % (mean_auc))
-    elif sys.argv[1] == "run":
-        params = param_sets[0]
+            mean_auc = run_model(True, *params, n=10)
+            print("Mean AUC: %f" % mean_auc)
+
+    elif sys.argv[1] == "submission":
+        params = params_best
         print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
         mean_auc = run_model(False, *params)
+
+    elif sys.argv[1] == "analyse":
+        params = params_best
+        print("lgr_args:{} rf_args:{} svm_args:{} mix:{}".format(*params))
+        mean_auc = run_model(True, *params, n=1)
+        print("Mean AUC: %f" % mean_auc)
+
+    else:
+        print("Unknown command: {0}".format(sys.argv[1]))
