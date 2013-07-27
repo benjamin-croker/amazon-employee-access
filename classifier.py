@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 from sklearn import (metrics, cross_validation, linear_model,
                      preprocessing, ensemble, svm)
 
-SEED = 111  # always use a seed for randomized procedures
+SEED = 1000  # always use a seed for randomized procedures
 
 
 def roc_eval(actual_values, predicted_values, fig=None, label=None):
     """
-    Returns the ROC area under curve
+    Returns the ROC area under curve and adds the ROC curve to fig
     :param predicted_values:
     :param actual_values:
     :param fig: the matplotlib axis to plot on, if none is give, a new
@@ -34,18 +34,46 @@ def roc_eval(actual_values, predicted_values, fig=None, label=None):
 
 
 def predictions_dist(actual_values, predicted_values, fig=None):
-    posProbs = predicted_values[actual_values == 1]
-    negProbs = predicted_values[actual_values == 0]
+    pos_probs = predicted_values[actual_values == 1]
+    neg_probs = predicted_values[actual_values == 0]
 
     if fig is None:
         fig = plt.figure()
     axPos = fig.add_subplot(211)
-    axPos.hist(posProbs, 20)
+    axPos.hist(pos_probs, 20)
     axPos.set_xlabel("Probs for +ve datapoints")
 
     axNeg = fig.add_subplot(212)
-    axNeg.hist(negProbs, 20)
+    axNeg.hist(neg_probs, 20)
     axNeg.set_xlabel("Probs for -ve datapoints")
+
+
+def predictions_joint_dist(actual_values, lgr_preds, rf_preds, svm_preds):
+    # get the indices for True values
+    pos_indices = (actual_values == 1)
+    neg_indices = (actual_values == 0)
+
+    fig = plt.figure()
+
+    ax = fig.add_subplot(221)
+    ax.plot(lgr_preds[pos_indices], rf_preds[pos_indices], "b.")
+    ax.plot(lgr_preds[neg_indices], rf_preds[neg_indices], "r.")
+    ax.set_xlabel("LGR Probs")
+    ax.set_ylabel("RF Probs")
+
+    ax = fig.add_subplot(222)
+    ax.plot(lgr_preds[pos_indices], svm_preds[pos_indices], "b.")
+    ax.plot(lgr_preds[neg_indices], svm_preds[neg_indices], "r.")
+    ax.set_xlabel("LGR Probs")
+    ax.set_ylabel("SVM Probs")
+
+    ax = fig.add_subplot(223)
+    ax.plot(rf_preds[pos_indices], svm_preds[pos_indices], "b.")
+    ax.plot(rf_preds[neg_indices], svm_preds[neg_indices], "r.")
+    ax.set_xlabel("RF Probs")
+    ax.set_ylabel("SVM Probs")
+
+    return fig
 
 
 def load_data(filename, use_labels=True):
@@ -144,12 +172,14 @@ def run_model(test, lgr_args, rf_args, svm_args, mix, n=10):
             rf_preds = rf_model.predict(X_cv_label)
             svm_preds = svm_model.predict_proba(X_cv_onehot)[:, 1]
 
+            pick_svm = svm_preds < 0.3
             combined_preds = mix[0] * lgr_preds + mix[1] * rf_preds + mix[2] * svm_preds
+            combined_preds = ~pick_svm*combined_preds + pick_svm*svm_preds
 
             # compute AUC metric for this CV fold
             roc_fig = plt.figure()
-
             dist_fig = plt.figure()
+
             predictions_dist(y_cv, lgr_preds, fig=dist_fig)
             dist_fig.savefig(os.path.join("plots", "lgr_dist_fold_{0}.png".format(i + 1)))
             roc_auc = roc_eval(y_cv, lgr_preds, fig=roc_fig, label="LGR")
@@ -178,7 +208,13 @@ def run_model(test, lgr_args, rf_args, svm_args, mix, n=10):
             plt.legend()
             roc_fig.savefig(os.path.join("plots", "roc_fold_{0}.png".format(i + 1)))
 
-            mean_auc += roc_auc
+            joint_fig = predictions_joint_dist(y_cv, lgr_preds, rf_preds, svm_preds)
+            joint_fig.savefig(os.path.join("plots", "joint_dist_fold_{0}.png".format(i + 1)))
+
+            fpr, tpr, thresholds = metrics.roc_curve(y_cv, combined_preds)
+            combined_roc_auc = metrics.auc(fpr, tpr)
+
+            mean_auc += combined_roc_auc
         return mean_auc / n
 
     else:
@@ -195,7 +231,9 @@ def run_model(test, lgr_args, rf_args, svm_args, mix, n=10):
         rf_preds = rf_model.predict(X_test_label)
         svm_preds = svm_model.predict_proba(X_test_onehot)[:, 1]
 
+        pick_svm = svm_preds < 0.3
         combined_preds = mix[0] * lgr_preds + mix[1] * rf_preds + mix[2] * svm_preds
+        combined_preds = ~pick_svm*combined_preds + pick_svm*svm_preds
 
         filename = raw_input("Enter name for submission file: ")
         save_results(combined_preds, filename + ".csv")
