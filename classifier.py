@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn import (metrics, cross_validation, linear_model,
                      preprocessing, ensemble, svm)
 
-SEED = 1000  # always use a seed for randomized procedures
+SEED = 212  # always use a seed for randomized procedures
 
 
 def roc_eval(actual_values, predicted_values, fig=None, label=None):
@@ -244,28 +244,20 @@ if __name__ == '__main__':
     # (lgr_args, rf_args, svm_args, mix)
     params_best = ({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   {"C": 1, "gamma": 0.1, "cache_size": 500},
                    [9.0, 6.0, 6.0])
     param_sets = [({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
-                   [9.0, 6.0, 6.0]), # Mean AUC: 0.870934
+                   {"C": 1, "gamma": 0.1, "cache_size": 500},
+                   [9.0, 6.0, 6.0]),
                   ({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
-                   [9.0, 6.0, 3.0]), # Mean AUC: 0.870739
+                   {"C": 1, "gamma": 0.1, "cache_size": 500},
+                   [9.0, 6.0, 4.0]),
                   ({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
-                   [6.0, 4.0, 0.0]), # Mean AUC: 0.869819
-                  ({"C": 3},
-                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
-                   [9.0, 3.0, 6.0]), # Mean AUC: 0.869334
-                  ({"C": 3},
-                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
-                   [6.0, 0.0, 4.0])  # Mean AUC: 0.860840
+                   {"C": 1, "gamma": 0.1, "cache_size": 500},
+                   [9.0, 4.0, 6.0])
     ]
 
     if sys.argv[1] == "evaluate":
