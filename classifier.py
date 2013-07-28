@@ -244,20 +244,16 @@ if __name__ == '__main__':
     # (lgr_args, rf_args, svm_args, mix)
     params_best = ({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 500},
-                   [9.0, 6.0, 6.0])
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   [9.0, 5.0, 5.0]) # Mean AUC: 0.877086
     param_sets = [({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 500},
-                   [9.0, 6.0, 6.0]),
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   [9.0, 4.0, 4.0]), # Mean AUC: 0.876363
                   ({"C": 3},
                    {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 500},
-                   [9.0, 6.0, 4.0]),
-                  ({"C": 3},
-                   {"n_estimators": 100, "min_samples_split": 8, "min_samples_leaf": 1},
-                   {"C": 1, "gamma": 0.1, "cache_size": 500},
-                   [9.0, 4.0, 6.0])
+                   {"C": 1, "gamma": 0.1, "cache_size": 1000},
+                   [9.0, 3.0, 3.0]), # Mean AUC: 0.876440
     ]
 
     if sys.argv[1] == "evaluate":
